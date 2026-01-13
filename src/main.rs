@@ -1,7 +1,9 @@
 #[allow(unused_imports)]
 use std::net::UdpSocket;
-mod headers;
-use headers::Headers;
+mod dns;
+use dns::Headers;
+
+use crate::dns::Question;
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -25,12 +27,19 @@ fn main() {
                     recursion_available: false,
                     reserved: 0,
                     response_code: 0,
-                    question_count: 0,
+                    question_count: 1,
                     answer_record_count: 0,
                     authority_record_count: 0,
                     additional_record_count: 0,
                 };
-                let response: Vec<u8> = headers.into();
+                let mut response: Vec<u8> = headers.into();
+                let question = Question {
+                    name: vec![String::from("codecrafters"), String::from("io")],
+                    record_type: 1,
+                    class: 1,
+                };
+                let question_bytes: Vec<u8> = question.into();
+                response.extend_from_slice(&question_bytes);
                 udp_socket
                     .send_to(&response, source)
                     .expect("Failed to send response");

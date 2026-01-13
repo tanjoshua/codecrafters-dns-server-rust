@@ -1,0 +1,76 @@
+pub struct Headers {
+    pub packet_id: u16,
+    pub query_response_indicator: bool,
+    pub operation_code: u8, // 4bits
+    pub authoritative_answer: bool,
+    pub truncation: bool,
+    pub recursion_desired: bool,
+    pub recursion_available: bool,
+    pub reserved: u8,      // 3 bits
+    pub response_code: u8, // 4 bits
+    pub question_count: u16,
+    pub answer_record_count: u16,
+    pub authority_record_count: u16,
+    pub additional_record_count: u16,
+}
+
+impl From<Headers> for Vec<u8> {
+    fn from(headers: Headers) -> Self {
+        let mut bytes = Vec::with_capacity(12);
+        bytes.extend_from_slice(&headers.packet_id.to_be_bytes());
+
+        // first byte
+        // bit 1
+        let mut b1 = (headers.query_response_indicator as u8) << 7;
+        // bit 2-5
+        b1 |= headers.operation_code << 3;
+        // bit 6
+        b1 |= (headers.authoritative_answer as u8) << 2;
+        // bit 7
+        b1 |= (headers.truncation as u8) << 1;
+        // bit 8
+        b1 |= headers.recursion_desired as u8;
+        bytes.push(b1);
+
+        // second byte
+        // bit 1
+        let mut b2 = (headers.recursion_available as u8) << 7;
+        // bits 2-4
+        b2 |= headers.reserved << 4;
+        // bits 5-8
+        b2 |= headers.response_code;
+        bytes.push(b2);
+
+        bytes.extend_from_slice(&headers.question_count.to_be_bytes());
+        bytes.extend_from_slice(&headers.answer_record_count.to_be_bytes());
+        bytes.extend_from_slice(&headers.authority_record_count.to_be_bytes());
+        bytes.extend_from_slice(&headers.additional_record_count.to_be_bytes());
+
+        bytes
+    }
+}
+
+pub struct Question {
+    pub name: Vec<String>,
+    pub record_type: u16,
+    pub class: u16,
+}
+
+impl From<Question> for Vec<u8> {
+    fn from(question: Question) -> Self {
+        let mut bytes = Vec::new();
+
+        for label in question.name {
+            let size = label.len() as u8;
+            bytes.extend_from_slice(&size.to_be_bytes());
+            bytes.extend_from_slice(label.as_bytes());
+        }
+
+        bytes.push(b'\0');
+
+        bytes.extend_from_slice(&question.record_type.to_be_bytes());
+        bytes.extend_from_slice(&question.class.to_be_bytes());
+
+        bytes
+    }
+}
