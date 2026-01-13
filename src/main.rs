@@ -3,7 +3,7 @@ use std::net::UdpSocket;
 mod dns;
 use dns::Headers;
 
-use crate::dns::Question;
+use crate::dns::{Answer, Question};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -28,7 +28,7 @@ fn main() {
                     reserved: 0,
                     response_code: 0,
                     question_count: 1,
-                    answer_record_count: 0,
+                    answer_record_count: 1,
                     authority_record_count: 0,
                     additional_record_count: 0,
                 };
@@ -40,6 +40,17 @@ fn main() {
                 };
                 let question_bytes: Vec<u8> = question.into();
                 response.extend_from_slice(&question_bytes);
+
+                let answer = Answer {
+                    name: vec![String::from("codecrafters"), String::from("io")],
+                    record_type: 1,
+                    class: 1,
+                    ttl: 60,
+                    data: b"8.8.8.8".to_vec(),
+                };
+                let answer_bytes: Vec<u8> = answer.into();
+                response.extend_from_slice(&answer_bytes);
+
                 udp_socket
                     .send_to(&response, source)
                     .expect("Failed to send response");

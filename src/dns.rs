@@ -74,3 +74,33 @@ impl From<Question> for Vec<u8> {
         bytes
     }
 }
+
+pub struct Answer {
+    pub name: Vec<String>,
+    pub record_type: u16,
+    pub class: u16,
+    pub ttl: u32,
+    pub data: Vec<u8>,
+}
+
+impl From<Answer> for Vec<u8> {
+    fn from(answer: Answer) -> Self {
+        let mut bytes = Vec::new();
+
+        for label in answer.name {
+            let size = label.len() as u8;
+            bytes.extend_from_slice(&size.to_be_bytes());
+            bytes.extend_from_slice(label.as_bytes());
+        }
+        bytes.push(b'\0');
+
+        bytes.extend_from_slice(&answer.record_type.to_be_bytes());
+        bytes.extend_from_slice(&answer.class.to_be_bytes());
+        bytes.extend_from_slice(&answer.ttl.to_be_bytes());
+
+        bytes.extend_from_slice(&answer.data.len().to_be_bytes());
+        bytes.extend_from_slice(&answer.data);
+
+        bytes
+    }
+}
