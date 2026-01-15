@@ -3,7 +3,7 @@ use std::net::UdpSocket;
 mod dns;
 use dns::Headers;
 
-use crate::dns::{Answer, Question};
+use crate::dns::{Answer, DNSPacket, Question};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -16,17 +16,22 @@ fn main() {
     loop {
         match udp_socket.recv_from(&mut buf) {
             Ok((size, source)) => {
+                let packet = DNSPacket::from_bytes(&buf);
                 println!("Received {} bytes from {}", size, source);
                 let headers = Headers {
-                    packet_id: 1234,
+                    packet_id: packet.headers.packet_id,
                     query_response_indicator: true,
-                    operation_code: 0,
+                    operation_code: packet.headers.operation_code,
                     authoritative_answer: false,
                     truncation: false,
-                    recursion_desired: false,
+                    recursion_desired: packet.headers.recursion_desired,
                     recursion_available: false,
                     reserved: 0,
-                    response_code: 0,
+                    response_code: if packet.headers.operation_code == 0 {
+                        0
+                    } else {
+                        4
+                    },
                     question_count: 1,
                     answer_record_count: 1,
                     authority_record_count: 0,

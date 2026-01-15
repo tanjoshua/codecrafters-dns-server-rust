@@ -1,3 +1,4 @@
+use bytes::Buf;
 pub struct Headers {
     pub packet_id: u16,
     pub query_response_indicator: bool,
@@ -12,6 +13,43 @@ pub struct Headers {
     pub answer_record_count: u16,
     pub authority_record_count: u16,
     pub additional_record_count: u16,
+}
+
+impl Headers {
+    pub fn from_bytes(mut buf: &[u8]) -> Headers {
+        let id = buf.get_u16();
+        let b1 = buf.get_u8();
+        let query_response_indicator = (b1 >> 7) & 1 == 1;
+        let operation_code = (b1 >> 3) & 0b1111;
+        let authoritative_answer = (b1 >> 2) & 1 == 1;
+        let truncation = (b1 >> 1) & 1 == 1;
+        let recursion_desired = b1 & 1 == 1;
+
+        let b2 = buf.get_u8();
+        let recursion_available = (b2 >> 7) & 1 == 1;
+        let reserved = (b2 >> 4) & 0b111;
+        let response_code = b2 & 0b1111;
+        let question_count = buf.get_u16();
+        let answer_record_count = buf.get_u16();
+        let authority_record_count = buf.get_u16();
+        let additional_record_count = buf.get_u16();
+
+        Headers {
+            packet_id: id,
+            query_response_indicator,
+            operation_code,
+            authoritative_answer,
+            truncation,
+            recursion_desired,
+            recursion_available,
+            reserved,
+            response_code,
+            question_count,
+            answer_record_count,
+            authority_record_count,
+            additional_record_count,
+        }
+    }
 }
 
 impl From<Headers> for Vec<u8> {
@@ -102,5 +140,16 @@ impl From<Answer> for Vec<u8> {
         bytes.extend_from_slice(&answer.data);
 
         bytes
+    }
+}
+
+pub struct DNSPacket {
+    pub headers: Headers,
+}
+
+impl DNSPacket {
+    pub fn from_bytes(buf: &[u8]) -> Self {
+        let headers = Headers::from_bytes(buf);
+        DNSPacket { headers }
     }
 }
