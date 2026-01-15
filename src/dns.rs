@@ -94,6 +94,29 @@ pub struct Question {
     pub class: u16,
 }
 
+impl Question {
+    fn from_bytes(mut buf: &[u8]) -> Self {
+        let mut len = buf.get_u8();
+        let mut name = Vec::<String>::new();
+        while len > 0 {
+            println!("str len: {len}");
+            let str_bytes = buf.copy_to_bytes(len as usize);
+            let s = str::from_utf8(&str_bytes).expect("invalid bytes");
+            println!("read str: {s}");
+            name.push(s.into());
+            len = buf.get_u8();
+        }
+
+        let record_type = buf.get_u16();
+        let class = buf.get_u16();
+        Question {
+            name,
+            record_type,
+            class,
+        }
+    }
+}
+
 impl From<Question> for Vec<u8> {
     fn from(question: Question) -> Self {
         let mut bytes = Vec::new();
@@ -145,11 +168,13 @@ impl From<Answer> for Vec<u8> {
 
 pub struct DNSPacket {
     pub headers: Headers,
+    pub question: Question,
 }
 
 impl DNSPacket {
     pub fn from_bytes(buf: &[u8]) -> Self {
-        let headers = Headers::from_bytes(buf);
-        DNSPacket { headers }
+        let headers = Headers::from_bytes(&buf[0..12]);
+        let question = Question::from_bytes(&buf[12..]);
+        DNSPacket { headers, question }
     }
 }

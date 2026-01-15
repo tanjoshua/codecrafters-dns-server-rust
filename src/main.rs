@@ -39,7 +39,7 @@ fn main() {
                 };
                 let mut response: Vec<u8> = headers.into();
                 let question = Question {
-                    name: vec![String::from("codecrafters"), String::from("io")],
+                    name: packet.question.name.clone(),
                     record_type: 1,
                     class: 1,
                 };
@@ -47,7 +47,7 @@ fn main() {
                 response.extend_from_slice(&question_bytes);
 
                 let answer = Answer {
-                    name: vec![String::from("codecrafters"), String::from("io")],
+                    name: packet.question.name,
                     record_type: 1,
                     class: 1,
                     ttl: 60,
