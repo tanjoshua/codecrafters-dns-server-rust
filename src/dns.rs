@@ -94,26 +94,57 @@ pub struct Question {
     pub class: u16,
 }
 
-impl Question {
-    fn from_bytes(mut buf: &[u8]) -> Self {
-        let mut len = buf.get_u8();
-        let mut name = Vec::<String>::new();
-        while len > 0 {
-            println!("str len: {len}");
-            let str_bytes = buf.copy_to_bytes(len as usize);
-            let s = str::from_utf8(&str_bytes).expect("invalid bytes");
-            println!("read str: {s}");
-            name.push(s.into());
-            len = buf.get_u8();
+pub fn get_name(buf: &[u8], pos: usize) -> (Vec<String>, usize) {
+    let mut pos = pos;
+    let mut name = Vec::<String>::new();
+
+    loop {
+        // 1. check if pointer or label
+        let b1 = buf[pos];
+        if (b1 >> 6) == 0b11 {
+            let val = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+            let offset = ((val << 2) >> 2) as usize;
+            let (res, _) = get_name(buf, offset);
+            name.extend(res);
+            pos += 2; // pointer is 2 bytes
+            break;
         }
 
-        let record_type = buf.get_u16();
-        let class = buf.get_u16();
-        Question {
-            name,
-            record_type,
-            class,
+        // label
+        let len = buf[pos] as usize;
+        pos += 1;
+
+        // break if null byte
+        if len == 0 {
+            break;
         }
+
+        // get value
+        let s = str::from_utf8(&buf[pos..(pos + len)]).expect("bytes have to be valid string");
+        pos += len;
+        name.push(s.into());
+    }
+
+    (name, pos)
+}
+
+impl Question {
+    fn from_bytes(buf: &[u8], pos: usize) -> (Self, usize) {
+        let mut pos = pos;
+        let (name, new_pos) = get_name(buf, pos);
+        pos = new_pos;
+
+        let record_type = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+        let class = u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]);
+        pos += 4;
+        (
+            Question {
+                name,
+                record_type,
+                class,
+            },
+            pos,
+        )
     }
 }
 
@@ -159,7 +190,8 @@ impl From<Answer> for Vec<u8> {
         bytes.extend_from_slice(&answer.class.to_be_bytes());
         bytes.extend_from_slice(&answer.ttl.to_be_bytes());
 
-        bytes.extend_from_slice(&answer.data.len().to_be_bytes());
+        let rdlength = answer.data.len() as u16;
+        bytes.extend_from_slice(&rdlength.to_be_bytes());
         bytes.extend_from_slice(&answer.data);
 
         bytes
@@ -168,13 +200,19 @@ impl From<Answer> for Vec<u8> {
 
 pub struct DNSPacket {
     pub headers: Headers,
-    pub question: Question,
+    pub questions: Vec<Question>,
 }
 
 impl DNSPacket {
     pub fn from_bytes(buf: &[u8]) -> Self {
-        let headers = Headers::from_bytes(&buf[0..12]);
-        let question = Question::from_bytes(&buf[12..]);
-        DNSPacket { headers, question }
+        let headers = Headers::from_bytes(buf);
+        let mut questions = Vec::new();
+        let mut pos = 12;
+        for _ in 0..headers.question_count {
+            let (question, new_pos) = Question::from_bytes(buf, pos);
+            questions.push(question);
+            pos = new_pos
+        }
+        DNSPacket { headers, questions }
     }
 }

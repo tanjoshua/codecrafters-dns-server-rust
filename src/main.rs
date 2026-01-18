@@ -32,29 +32,34 @@ fn main() {
                     } else {
                         4
                     },
-                    question_count: 1,
-                    answer_record_count: 1,
+                    question_count: packet.headers.question_count,
+                    answer_record_count: packet.headers.question_count,
                     authority_record_count: 0,
                     additional_record_count: 0,
                 };
                 let mut response: Vec<u8> = headers.into();
-                let question = Question {
-                    name: packet.question.name.clone(),
-                    record_type: 1,
-                    class: 1,
-                };
-                let question_bytes: Vec<u8> = question.into();
-                response.extend_from_slice(&question_bytes);
 
-                let answer = Answer {
-                    name: packet.question.name,
-                    record_type: 1,
-                    class: 1,
-                    ttl: 60,
-                    data: b"8.8.8.8".to_vec(),
-                };
-                let answer_bytes: Vec<u8> = answer.into();
-                response.extend_from_slice(&answer_bytes);
+                for qn in &packet.questions {
+                    let question = Question {
+                        name: qn.name.clone(),
+                        record_type: qn.record_type,
+                        class: qn.class,
+                    };
+                    let question_bytes: Vec<u8> = question.into();
+                    response.extend_from_slice(&question_bytes);
+                }
+
+                for qn in &packet.questions {
+                    let answer = Answer {
+                        name: qn.name.clone(),
+                        record_type: qn.record_type,
+                        class: qn.class,
+                        ttl: 60,
+                        data: vec![8, 8, 8, 8],
+                    };
+                    let answer_bytes: Vec<u8> = answer.into();
+                    response.extend_from_slice(&answer_bytes);
+                }
 
                 udp_socket
                     .send_to(&response, source)
