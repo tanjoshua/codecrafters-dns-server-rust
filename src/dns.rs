@@ -1,4 +1,6 @@
 use bytes::Buf;
+
+#[derive(Debug, Clone)]
 pub struct Headers {
     pub packet_id: u16,
     pub query_response_indicator: bool,
@@ -88,6 +90,7 @@ impl From<Headers> for Vec<u8> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Question {
     pub name: Vec<String>,
     pub record_type: u16,
@@ -167,6 +170,7 @@ impl From<Question> for Vec<u8> {
     }
 }
 
+#[derive(Debug, Clone)]
 pub struct Answer {
     pub name: Vec<String>,
     pub record_type: u16,
@@ -198,9 +202,41 @@ impl From<Answer> for Vec<u8> {
     }
 }
 
+impl Answer {
+    fn from_bytes(buf: &[u8], pos: usize) -> (Self, usize) {
+        let mut pos = pos;
+        let (name, new_pos) = get_name(buf, pos);
+        pos = new_pos;
+
+        let record_type = u16::from_be_bytes([buf[pos], buf[pos + 1]]);
+        let class = u16::from_be_bytes([buf[pos + 2], buf[pos + 3]]);
+        let ttl = u32::from_be_bytes([buf[pos + 4], buf[pos + 5], buf[pos + 6], buf[pos + 7]]);
+        pos += 8;
+
+        let data_len = u16::from_be_bytes([buf[pos], buf[pos + 1]]) as usize;
+        pos += 2;
+
+        let data = Vec::from(&buf[pos..pos + data_len]);
+        pos += data_len;
+
+        (
+            Answer {
+                name,
+                record_type,
+                class,
+                ttl,
+                data,
+            },
+            pos,
+        )
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct DNSPacket {
     pub headers: Headers,
     pub questions: Vec<Question>,
+    pub answers: Vec<Answer>,
 }
 
 impl DNSPacket {
@@ -211,8 +247,37 @@ impl DNSPacket {
         for _ in 0..headers.question_count {
             let (question, new_pos) = Question::from_bytes(buf, pos);
             questions.push(question);
-            pos = new_pos
+            pos = new_pos;
         }
-        DNSPacket { headers, questions }
+
+        let mut answers = Vec::new();
+        for _ in 0..headers.answer_record_count {
+            let (answer, new_pos) = Answer::from_bytes(buf, pos);
+            answers.push(answer);
+            pos = new_pos;
+        }
+        DNSPacket {
+            headers,
+            questions,
+            answers,
+        }
+    }
+}
+
+impl From<DNSPacket> for Vec<u8> {
+    fn from(packet: DNSPacket) -> Self {
+        let mut bytes: Vec<u8> = packet.headers.into();
+
+        for qn in packet.questions {
+            let question_bytes: Vec<u8> = qn.into();
+            bytes.extend_from_slice(&question_bytes);
+        }
+
+        for ans in packet.answers {
+            let ans_bytes: Vec<u8> = ans.into();
+            bytes.extend_from_slice(&ans_bytes);
+        }
+
+        bytes
     }
 }

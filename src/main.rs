@@ -1,15 +1,21 @@
 #[allow(unused_imports)]
 use std::net::UdpSocket;
 mod dns;
+use clap::Parser;
 use dns::Headers;
 
 use crate::dns::{Answer, DNSPacket, Question};
 
-fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
+#[derive(Parser, Debug)]
+#[command(version, about)]
+struct Args {
+    // Resolver
+    #[arg(long)]
+    resolver: Option<String>,
+}
 
-    // TODO: Uncomment the code below to pass the first stage
+fn main() {
+    let args = Args::parse();
     let udp_socket = UdpSocket::bind("127.0.0.1:2053").expect("Failed to bind to address");
     let mut buf = [0; 512];
 
@@ -18,6 +24,7 @@ fn main() {
             Ok((size, source)) => {
                 let packet = DNSPacket::from_bytes(&buf);
                 println!("Received {} bytes from {}", size, source);
+
                 let headers = Headers {
                     packet_id: packet.headers.packet_id,
                     query_response_indicator: true,
@@ -49,16 +56,47 @@ fn main() {
                     response.extend_from_slice(&question_bytes);
                 }
 
-                for qn in &packet.questions {
-                    let answer = Answer {
-                        name: qn.name.clone(),
-                        record_type: qn.record_type,
-                        class: qn.class,
-                        ttl: 60,
-                        data: vec![8, 8, 8, 8],
-                    };
-                    let answer_bytes: Vec<u8> = answer.into();
-                    response.extend_from_slice(&answer_bytes);
+                match args.resolver.as_ref() {
+                    Some(resolver) => {
+                        println!("Forwarding packet to {}", resolver);
+                        let upstream_socket =
+                            UdpSocket::bind("0.0.0.0:0").expect("Failed to bind to address");
+
+                        for i in 0..packet.headers.question_count {
+                            // split questions into single packets
+                            let i = i as usize;
+                            let mut packet_clone = packet.clone();
+                            packet_clone.headers.question_count = 1;
+                            packet_clone.questions = Vec::from(&packet_clone.questions[i..i + 1]);
+                            let packet_buf: Vec<u8> = packet_clone.into();
+                            upstream_socket
+                                .send_to(&packet_buf, resolver)
+                                .expect("Failed to forward DNS packet");
+                            let _ = upstream_socket
+                                .recv_from(&mut buf)
+                                .expect("Expected a response");
+                            let forwarded_response_packet = DNSPacket::from_bytes(&buf);
+                            println!("{}: {:?}", i, forwarded_response_packet);
+
+                            for ans in forwarded_response_packet.answers {
+                                let answer_bytes: Vec<u8> = ans.into();
+                                response.extend_from_slice(&answer_bytes);
+                            }
+                        }
+                    }
+                    None => {
+                        for qn in &packet.questions {
+                            let answer = Answer {
+                                name: qn.name.clone(),
+                                record_type: qn.record_type,
+                                class: qn.class,
+                                ttl: 60,
+                                data: vec![8, 8, 8, 8],
+                            };
+                            let answer_bytes: Vec<u8> = answer.into();
+                            response.extend_from_slice(&answer_bytes);
+                        }
+                    }
                 }
 
                 udp_socket
